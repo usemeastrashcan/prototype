@@ -1,67 +1,105 @@
-import dotenv from 'dotenv';
 import nodemailer from 'nodemailer';
-import Customer from '@/models/Customer'; 
-import connectDB from '@/utils/db'; 
-import { Types } from 'mongoose'; // Import Types from Mongoose to validate ObjectId
+import Customer from '@/models/Customer';
+import connectDB from '@/utils/db';
+import { Types } from 'mongoose';
+import { NextResponse } from 'next/server';
 
-dotenv.config();
-
-// Create a Nodemailer transporter
+// Configure transporter outside the handler for reusability
 const transporter = nodemailer.createTransport({
-  service: 'gmail', // Example with Gmail; you can use any email service
-  auth: {
-    user: process.env.EMAIL_USER, // Your email
-    pass: process.env.EMAIL_PASS, // Your email password or App-specific password (use environment variables)
-  },
+    host: 'smtp.ethereal.email',
+    port: 587,
+    auth: {
+        user: 'lempi.kilback98@ethereal.email',
+        pass: 'gQmyHcQfPyebsB2euw'
+    }
 });
 
-// POST route to send the email
-export async function POST(req) {
-  try {
-    const { customerId, sendEmailConfirmation, emailContent } = await req.json(); // customerId and confirmation flag from request body
-
-    await connectDB(); // Connect to the database
-
-    // Check if confirmation flag is provided
-    if (sendEmailConfirmation === undefined) {
-      return Response.json({ message: 'Send email confirmation flag is missing.' }, { status: 400 });
-    }
-
-    // Ensure the customerId is a valid ObjectId
-    if (!Types.ObjectId.isValid(customerId)) {
-      return Response.json({ message: 'Invalid customerId format' }, { status: 400 });
-    }
-
-    // Fetch customer details from your database (example using MongoDB)
-    console.log("Fetching customer with ID:", customerId);
-
-    const customer = await Customer.findById(customerId); // Find customer by ID
-    console.log("Fetched customer:", customer);
-
-    if (!customer) {
-      return Response.json({ message: 'Customer not found' }, { status: 404 });
-    }
-
-    // If confirmation is true, send the email
-    if (sendEmailConfirmation) {
-      // Send the email via Nodemailer
-      const mailOptions = {
-        from: process.env.EMAIL_USER, // Sender email
-        to: customer.email,          // Receiver email (customer's email)
-        subject: 'Your Requested Email', // Subject of the email
-        text: emailContent,           // Email body content
-      };
-
+// Enhanced email sending function with retries
+async function sendEmailWithRetry(mailOptions, retries = 3) {
+  for (let i = 0; i < retries; i++) {
+    try {
       const info = await transporter.sendMail(mailOptions);
       console.log('Email sent:', info.response);
+      return info;
+    } catch (error) {
+      if (i === retries - 1) throw error;
+      console.log(`Retry ${i + 1} after email send failure`);
+      await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
+    }
+  }
+}
 
-      return Response.json({ message: 'Email sent successfully' }, { status: 200 });
-    } else {
-      return Response.json({ message: 'Email not sent (confirmation denied).' }, { status: 400 });
+export async function POST(req) {
+  try {
+        const { customerId, sendEmailConfirmation, emailContent } = await req.json();
+
+    // Validate required fields
+    if (!customerId || sendEmailConfirmation === undefined) {
+      return NextResponse.json(
+        { message: 'Missing required fields: customerId or sendEmailConfirmation' },
+        { status: 400 }
+      );
     }
 
+    if (!Types.ObjectId.isValid(customerId)) {
+      return NextResponse.json(
+        { message: 'Invalid customerId format' },
+        { status: 400 }
+      );
+    }
+
+    await connectDB();
+
+    // More secure query - only select needed fields
+    const customer = await Customer.findById(customerId).select('email');
+    if (!customer) {
+      return NextResponse.json(
+        { message: 'Customer not found' },
+        { status: 404 }
+      );
+    }
+
+    if (!sendEmailConfirmation) {
+      return NextResponse.json(
+        { message: 'Email not sent (confirmation denied)' },
+        { status: 200 }
+      );
+    }
+
+    // Validate email content
+    if (!emailContent || typeof emailContent !== 'string') {
+      return NextResponse.json(
+        { message: 'Invalid email content' },
+        { status: 400 }
+      );
+    }
+
+    // Sanitize email content (basic example)
+    const sanitizedContent = emailContent.replace(/<[^>]*>?/gm, '');
+
+    const mailOptions = {
+      from: `"Your Company" <${process.env.EMAIL_USER}>`,
+      to: customer.email,
+      subject: 'Your Requested Information',
+      text: sanitizedContent,
+      html: `<p>${sanitizedContent.replace(/\n/g, '<br>')}</p>`,
+    };
+
+    await sendEmailWithRetry(mailOptions);
+
+    return NextResponse.json(
+      { message: 'Email sent successfully' },
+      { status: 200 }
+    );
+
   } catch (error) {
-    console.error('Error sending email:', error);
-    return Response.json({ message: 'Error sending email', error: error.message }, { status: 500 });
+    console.error('Error in email sending:', error);
+    return NextResponse.json(
+      { 
+        message: 'Failed to send email',
+        error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      },
+      { status: 500 }
+    );
   }
 }
