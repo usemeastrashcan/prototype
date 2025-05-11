@@ -6,6 +6,8 @@ export async function POST(request) {
     await connectDB();
     const { name, email, phone } = await request.json();
 
+    console.log("Received data:", { name, email, phone });
+
     if (!name || !email || !phone) {
       return Response.json({ message: "Missing fields" }, { status: 400 });
     }

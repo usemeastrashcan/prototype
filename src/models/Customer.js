@@ -2,10 +2,10 @@
 import mongoose from "mongoose";
 
 const CustomerSchema = new mongoose.Schema({
-_id: { type: String, required: true },
   name: { type: String, required: true },
   email: { type: String, required: true },
   phone: { type: String, required: true },
+  role: {type: String, enum: ["mailer", "docer"], default: "mailer"},
   status: {
     type: String,
     enum: ["new", "contacted", "engaged", "converted", "lost"],
