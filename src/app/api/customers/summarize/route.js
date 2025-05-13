@@ -1,59 +1,69 @@
-import { NextResponse } from 'next/server';
-import { Document, Paragraph, TextRun, Packer } from 'docx';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { NextResponse } from "next/server"
+import { Document, Paragraph, TextRun, Packer } from "docx"
+import { GoogleGenerativeAI } from "@google/generative-ai"
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash", apiVersion: "v1" });
-
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash", apiVersion: "v1" })
 
 export async function POST(request) {
+  console.log("API route handler started")
+
   try {
-    const contentType = request.headers.get('content-type');
-    if (!contentType?.includes('multipart/form-data')) {
-      return NextResponse.json({ error: 'Content-Type must be multipart/form-data' }, { status: 400 });
+    const contentType = request.headers.get("content-type")
+    console.log("Content-Type:", contentType)
+
+    if (!contentType?.includes("multipart/form-data")) {
+      console.log("Invalid content type")
+      return NextResponse.json({ error: "Content-Type must be multipart/form-data" }, { status: 400 })
     }
 
-    const formData = await request.formData();
-    const file = formData.get('file');
+    console.log("Parsing form data...")
+    const formData = await request.formData()
+    const file = formData.get("file")
 
     if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+      console.log("No file provided")
+      return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    if (file.type !== 'application/pdf') {
-      return NextResponse.json({ error: 'Only PDF files are allowed' }, { status: 400 });
+    console.log("File received:", file.name, "Type:", file.type)
+
+    if (file.type !== "application/pdf") {
+      console.log("Invalid file type:", file.type)
+      return NextResponse.json({ error: "Only PDF files are allowed" }, { status: 400 })
     }
 
-    const arrayBuffer = await file.arrayBuffer();
-    const base64Data = Buffer.from(arrayBuffer).toString('base64');
+    console.log("Converting file to base64...")
+    const arrayBuffer = await file.arrayBuffer()
+    const base64Data = Buffer.from(arrayBuffer).toString("base64")
+    console.log("File converted to base64, length:", base64Data.length)
 
+    console.log("Preparing Gemini AI prompt...")
     const prompt = {
       contents: [
         {
           parts: [
             {
               inlineData: {
-                mimeType: 'application/pdf',
+                mimeType: "application/pdf",
                 data: base64Data,
               },
             },
             {
-              text: 'Summarize this document in 200-300 words.',
+              text: "Summarize this document in 200-300 words.",
             },
           ],
         },
       ],
-    };
+    }
 
-    const result = await model.generateContent(prompt);
-    const response = await result.response;
-    const summary = response.text();
+    console.log("Sending request to Gemini AI...")
+    const result = await model.generateContent(prompt)
+    const response = await result.response
+    const summary = response.text()
+    console.log("Summary received from Gemini AI")
 
+    console.log("Creating DOCX document...")
     const doc = new Document({
       sections: [
         {
@@ -71,26 +81,28 @@ export async function POST(request) {
           ],
         },
       ],
-    });
+    })
 
-    const docBuffer = await Packer.toBuffer(doc);
+    console.log("Generating DOCX buffer...")
+    const docBuffer = await Packer.toBuffer(doc)
+    console.log("DOCX buffer created, size:", docBuffer.length)
 
+    console.log("Sending response to client...")
     return new NextResponse(docBuffer, {
       headers: {
-        'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'Content-Disposition': 'attachment; filename="summary.docx"',
+        "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "Content-Disposition": 'attachment; filename="summary.docx"',
       },
-    });
-
+    })
   } catch (error) {
-    console.error('Processing error:', error);
+    console.error("Processing error:", error)
     return NextResponse.json(
       {
-        error: 'Processing failed',
+        error: "Processing failed",
         details: error.message,
-        ...(process.env.NODE_ENV === 'development' && { stack: error.stack }),
+        ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
       },
-      { status: 500 }
-    );
+      { status: 500 },
+    )
   }
 }

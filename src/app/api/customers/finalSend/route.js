@@ -31,12 +31,12 @@ async function sendEmailWithRetry(mailOptions, retries = 3) {
 
 export async function POST(req) {
   try {
-        const { customerId, sendEmailConfirmation, emailContent } = await req.json();
+        const { customerId, emailContent } = await req.json();
 
     // Validate required fields
-    if (!customerId || sendEmailConfirmation === undefined) {
+    if (!customerId ) {
       return NextResponse.json(
-        { message: 'Missing required fields: customerId or sendEmailConfirmation' },
+        { message: 'Missing required fields: customerId' },
         { status: 400 }
       );
     }
@@ -59,12 +59,6 @@ export async function POST(req) {
       );
     }
 
-    if (!sendEmailConfirmation) {
-      return NextResponse.json(
-        { message: 'Email not sent (confirmation denied)' },
-        { status: 200 }
-      );
-    }
 
     // Validate email content
     if (!emailContent || typeof emailContent !== 'string') {
