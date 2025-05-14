@@ -60,6 +60,25 @@ export default function CustomerTools() {
     }
   }
 
+  // Function to handle logout
+  const handleLogout = async () => {
+    try {
+      const response = await fetch("/api/logout", {
+      method: "POST",
+      credentials: "include",
+    })
+
+      if (response.ok) {
+        // Redirect to login page after successful logout
+        window.location.href = "/login"
+      } else {
+        console.error("Logout failed:", await response.text())
+      }
+    } catch (error) {
+      console.error("Error during logout:", error)
+    }
+  }
+
   // Get options based on user role
   const getOptionsForRole = (role: string | null) => {
     if (role === "docer") {
@@ -253,9 +272,18 @@ export default function CustomerTools() {
 
         {!confirmedTool ? (
           <Card className="max-w-4xl mx-auto shadow-lg border-0 overflow-hidden">
-            <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-4 text-white flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" />
-              <h2 className="font-semibold">Customer Service Chat</h2>
+            <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-4 text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" />
+                <h2 className="font-semibold">Customer Service Chat</h2>
+              </div>
+              <Button
+                variant="ghost"
+                className="text-white hover:bg-purple-600 hover:text-white"
+                onClick={handleLogout}
+              >
+                Logout
+              </Button>
             </div>
             <CardContent className="p-0">
               <div className="h-[500px] flex flex-col">

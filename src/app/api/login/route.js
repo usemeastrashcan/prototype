@@ -9,7 +9,7 @@ export async function POST(request) {
 
     const { email } = await request.json();
 
-    const user = await Customer.findOne({ email });
+    const user = await Customer.findOne({ email, admin: true });
     if (!user) {
       return NextResponse.json(
         { message: 'Invalid credentials' },

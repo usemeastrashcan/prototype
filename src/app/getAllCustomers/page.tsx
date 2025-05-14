@@ -6,7 +6,7 @@ import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Users, Mail, Phone, MessageSquare } from "lucide-react"
+import { Users, Mail, Phone, MessageSquare, LogOut, UserPlus } from "lucide-react"
 import Cookies from "js-cookie"
 
 type Customer = {
@@ -81,6 +81,22 @@ export default function CustomerList() {
     router.push(`/chatbox`)
   }
 
+  const handleLogout = async () => {
+    try {
+      const response = await fetch("/api/logout", {
+      method: "POST",
+      credentials: "include",
+    })
+      router.push("/login")
+    } catch (error) {
+      console.error("Logout failed:", error)
+    }
+  }
+
+  const handleAddCustomer = () => {
+    router.push("/addCustomer")
+  }
+
   return (
     <div className="container mx-auto py-8 px-4 md:px-6">
       <div className="flex items-center justify-between mb-8">
@@ -90,8 +106,25 @@ export default function CustomerList() {
           </h1>
           <p className="text-slate-500 mt-2">Manage and connect with your customers</p>
         </div>
-        <div className="hidden md:block">
-          <Users className="h-12 w-12 text-indigo-500" />
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={handleAddCustomer}
+            className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white"
+          >
+            <UserPlus className="h-4 w-4 mr-2" />
+            Add Customer
+          </Button>
+          <Button
+            onClick={handleLogout}
+            variant="outline"
+            className="border-indigo-600 text-indigo-600 hover:bg-indigo-50"
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            Logout
+          </Button>
+          <div className="hidden md:block ml-4">
+            <Users className="h-12 w-12 text-indigo-500" />
+          </div>
         </div>
       </div>
 

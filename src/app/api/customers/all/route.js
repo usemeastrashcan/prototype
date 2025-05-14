@@ -5,7 +5,7 @@ import Customer from "@/models/Customer";
 export async function GET() {
   try {
     await connectDB();
-    const customers = await Customer.find().sort({ createdAt: -1 });
+    const customers = await Customer.find({admin: false}).sort({ createdAt: -1 });
 
     // Explicitly set Content-Type to application/json
     return new Response(JSON.stringify(customers), {
