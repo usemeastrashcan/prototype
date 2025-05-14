@@ -1,4 +1,3 @@
-
 "use client"
 
 import type React from "react"
@@ -34,34 +33,88 @@ type Message = {
 }
 
 export default function CustomerTools() {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      content: "Hello! I'm your assistant. What would you like to do today?",
-      sender: "bot",
-      options: [
-        {
-          id: "pdf-option",
-          label: "Summarize a PDF",
-          value: "pdf",
-          icon: <FileText className="h-4 w-4" />,
-          description: "Upload a PDF document and get an AI-generated summary",
-        },
-        {
-          id: "email-option",
-          label: "Generate Customer Email",
-          value: "email",
-          icon: <Mail className="h-4 w-4" />,
-          description: "Create a personalized email for a customer",
-        },
-      ],
-    },
-  ])
+  const [userRole, setUserRole] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [selectedTool, setSelectedTool] = useState<"pdf" | "email" | null>(null)
   const [showConfirmation, setShowConfirmation] = useState(false)
   const [confirmedTool, setConfirmedTool] = useState<"pdf" | "email" | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Function to get user role from API
+  const getUserRole = async () => {
+    try {
+      const response = await fetch("/api/get-user-role")
+
+      if (!response.ok) {
+        console.error("Failed to fetch user role:", await response.text())
+        return null
+      }
+
+      const data = await response.json()
+      return data.role
+    } catch (error) {
+      console.error("Error fetching user role:", error)
+      return null
+    }
+  }
+
+  // Get options based on user role
+  const getOptionsForRole = (role: string | null) => {
+    if (role === "docer") {
+      return [
+        {
+          id: "pdf-option",
+          label: "Summarize a PDF",
+          value: "pdf" as const,
+          icon: <FileText className="h-4 w-4" />,
+          description: "Upload a PDF document and get an AI-generated summary",
+        },
+      ]
+    } else if (role === "mailer") {
+      return [
+        {
+          id: "email-option",
+          label: "Generate Customer Email",
+          value: "email" as const,
+          icon: <Mail className="h-4 w-4" />,
+          description: "Create a personalized email for a customer",
+        },
+      ]
+    }
+
+    // If role is not recognized or null, return empty array
+    return []
+  }
+
+  // Initialize user role and welcome message
+  useEffect(() => {
+    const initializeUser = async () => {
+      setIsLoading(true)
+
+      // Get user role from API
+      const role = await getUserRole()
+      setUserRole(role)
+
+      // Get options based on role
+      const options = getOptionsForRole(role)
+
+      // Set initial welcome message
+      setMessages([
+        {
+          id: "welcome",
+          content: "Hello! I'm your assistant. What would you like to do today?",
+          sender: "bot",
+          options: options,
+        },
+      ])
+
+      setIsLoading(false)
+    }
+
+    initializeUser()
+  }, [])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -127,22 +180,7 @@ export default function CustomerTools() {
       id: Date.now().toString() + "-bot",
       content: "No problem. What would you like to do instead?",
       sender: "bot",
-      options: [
-        {
-          id: "pdf-option",
-          label: "Summarize a PDF",
-          value: "pdf",
-          icon: <FileText className="h-4 w-4" />,
-          description: "Upload a PDF document and get an AI-generated summary",
-        },
-        {
-          id: "email-option",
-          label: "Generate Customer Email",
-          value: "email",
-          icon: <Mail className="h-4 w-4" />,
-          description: "Create a personalized email for a customer",
-        },
-      ],
+      options: getOptionsForRole(userRole),
     }
 
     setMessages((prev) => [...prev, cancelMessage])
@@ -170,22 +208,7 @@ export default function CustomerTools() {
         id: Date.now().toString() + "-bot",
         content: "I can help you with that. Please select one of the following options:",
         sender: "bot",
-        options: [
-          {
-            id: "pdf-option",
-            label: "Summarize a PDF",
-            value: "pdf",
-            icon: <FileText className="h-4 w-4" />,
-            description: "Upload a PDF document and get an AI-generated summary",
-          },
-          {
-            id: "email-option",
-            label: "Generate Customer Email",
-            value: "email",
-            icon: <Mail className="h-4 w-4" />,
-            description: "Create a personalized email for a customer",
-          },
-        ],
+        options: getOptionsForRole(userRole),
       }
       setMessages((prev) => [...prev, botResponse])
     }, 500)
@@ -199,25 +222,21 @@ export default function CustomerTools() {
       id: Date.now().toString() + "-bot",
       content: "Welcome back! What would you like to do next?",
       sender: "bot",
-      options: [
-        {
-          id: "pdf-option",
-          label: "Summarize a PDF",
-          value: "pdf",
-          icon: <FileText className="h-4 w-4" />,
-          description: "Upload a PDF document and get an AI-generated summary",
-        },
-        {
-          id: "email-option",
-          label: "Generate Customer Email",
-          value: "email",
-          icon: <Mail className="h-4 w-4" />,
-          description: "Create a personalized email for a customer",
-        },
-      ],
+      options: getOptionsForRole(userRole),
     }
 
     setMessages((prev) => [...prev, returnMessage])
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading your assistant...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -263,7 +282,7 @@ export default function CustomerTools() {
                         >
                           <p>{message.content}</p>
 
-                          {message.options && (
+                          {message.options && message.options.length > 0 && (
                             <div className="mt-3 space-y-2">
                               {message.options.map((option) => (
                                 <button
