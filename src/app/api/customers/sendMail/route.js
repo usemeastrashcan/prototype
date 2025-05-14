@@ -2,12 +2,41 @@
 import connectDB from '@/utils/db';
 import Customer from "@/models/Customer";
 import generateEmail from "@/utils/generateEmail";
-
+import { cookies } from 'next/headers'; // Import cookies function [^1]
 
 export async function POST(req) {
   try {
-    // Parse customer ID from request body (no sendConfirmed yet)
-    const { customerId } = await req.json();
+    // Get the customer cookie instead of parsing from request body
+    const cookieStore = await cookies();
+    const customerCookie = cookieStore.get('customer');
+    
+    if (!customerCookie || !customerCookie.value) {
+      return new Response(
+        JSON.stringify({ message: "No customer selected!" }),
+        { status: 400 }
+      );
+    }
+    
+    // Parse the customer data from the cookie
+    let customerData;
+    try {
+      customerData = JSON.parse(customerCookie.value);
+    } catch (error) {
+      return new Response(
+        JSON.stringify({ message: "Invalid customer data in cookie" }),
+        { status: 400 }
+      );
+    }
+    
+    // Extract the customer ID from the parsed data
+    const customerId = customerData._id;
+    
+    if (!customerId) {
+      return new Response(
+        JSON.stringify({ message: "Customer ID not found in cookie data" }),
+        { status: 400 }
+      );
+    }
     
     // Connect to the database
     console.log(customerId);

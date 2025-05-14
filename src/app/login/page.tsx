@@ -46,7 +46,7 @@ export default function LoginPage() {
         if (data.role === "admin") {
           router.push("/admin/dashboard")
         } else {
-          router.push("/")
+          router.push("/getAllCustomers")
         }
       }, 1500)
     } catch (err: any) {
@@ -143,12 +143,12 @@ export default function LoginPage() {
             </CardContent>
 
             <CardFooter className="flex flex-col space-y-4 pt-0">
-              <div className="relative flex items-center justify-center w-full">
+              {/* <div className="relative flex items-center justify-center w-full">
                 <div className="border-t border-gray-200 absolute w-full"></div>
                 <div className="bg-white px-4 text-sm text-gray-500 relative">or continue with</div>
-              </div>
+              </div> */}
 
-              <div className="grid grid-cols-2 gap-3 w-full">
+              {/* <div className="grid grid-cols-2 gap-3 w-full">
                 <Button variant="outline" className="bg-white hover:bg-gray-50 text-gray-700 border-gray-200">
                   <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24">
                     <path
@@ -181,14 +181,14 @@ export default function LoginPage() {
                   </svg>
                   GitHub
                 </Button>
-              </div>
+              </div> */}
 
-              <div className="text-center text-sm text-gray-500">
+              {/* <div className="text-center text-sm text-gray-500">
                 Don't have an account?{" "}
                 <a href="/register" className="font-medium text-purple-600 hover:text-purple-800">
                   Sign up
                 </a>
-              </div>
+              </div> */}
             </CardFooter>
           </Card>
         )}

@@ -2,10 +2,9 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Mail, Send, Loader2, User, AlertCircle, Edit } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
@@ -20,9 +19,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import Cookies from "js-cookie"
 
 export default function CustomerEmailGenerator() {
-  const [customerId, setCustomerId] = useState("")
+  // Remove this line:
+  // const [customerId, setCustomerId] = useState("")
+
+  // Add this state to store the customer object:
+  const [customer, setCustomer] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [emailData, setEmailData] = useState<{
@@ -30,11 +34,28 @@ export default function CustomerEmailGenerator() {
     emailContent: string
   } | null>(null)
 
+  // Add this useEffect after the state declarations:
+  useEffect(() => {
+    const customerCookie = Cookies.get("customer")
+    console.log("Customer cookie:", customerCookie)
+    if (customerCookie) {
+      try {
+        const parsedCustomer = JSON.parse(customerCookie)
+        console.log("Parsed customer from cookie:", parsedCustomer)
+        setCustomer(parsedCustomer)
+      } catch (err) {
+        setError("Invalid customer data in cookie")
+      }
+    } else {
+      setError("No customer selected")
+    }
+  }, [])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!customerId.trim()) {
-      setError("Please enter a customer ID")
+    if (!customer || !customer._id) {
+      setError("No customer selected")
       return
     }
 
@@ -47,7 +68,7 @@ export default function CustomerEmailGenerator() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ customerId }),
+        body: JSON.stringify({ customerId: customer.id }),
       })
 
       const data = await response.json()
@@ -73,23 +94,24 @@ export default function CustomerEmailGenerator() {
           <Card>
             <CardHeader>
               <CardTitle>Customer Lookup</CardTitle>
-              <CardDescription>Enter a customer ID to generate a personalized email</CardDescription>
+              <CardDescription>Generate a personalized email for the selected customer</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <label htmlFor="customerId" className="text-sm font-medium">
-                    Customer ID
-                  </label>
-                  <div className="flex space-x-2">
-                    <Input
-                      id="customerId"
-                      type="text"
-                      placeholder="Enter customer ID"
-                      value={customerId}
-                      onChange={(e) => setCustomerId(e.target.value)}
-                    />
-                    <Button type="submit" disabled={loading}>
+                  <label className="text-sm font-medium">Selected Customer</label>
+                  <div className="flex items-center space-x-2">
+                    <div className="flex-1 p-3 bg-muted rounded-md">
+                      {customer ? (
+                        <div className="flex items-center">
+                          <User className="h-4 w-4 mr-2 text-muted-foreground" />
+                          <span>{customer.name || customer.id}</span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">No customer selected</span>
+                      )}
+                    </div>
+                    <Button type="submit" disabled={loading || !customer}>
                       {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                     </Button>
                   </div>
@@ -138,7 +160,7 @@ export default function CustomerEmailGenerator() {
               exit={{ opacity: 0, y: -20 }}
               transition={{ duration: 0.3 }}
             >
-              <EmailPreview emailContent={emailData.emailContent} customerId={customerId} />
+              <EmailPreview emailContent={emailData.emailContent} customerId={customer?.id || ""} />
             </motion.div>
           ) : (
             <motion.div
@@ -152,7 +174,7 @@ export default function CustomerEmailGenerator() {
                 <Mail className="h-16 w-16 text-muted-foreground/50" />
                 <div>
                   <h3 className="text-lg font-medium">No Email Generated Yet</h3>
-                  <p className="text-muted-foreground">Enter a customer ID to generate a personalized email</p>
+                  <p className="text-muted-foreground">Click the Send button to generate a personalized email</p>
                 </div>
               </div>
             </motion.div>

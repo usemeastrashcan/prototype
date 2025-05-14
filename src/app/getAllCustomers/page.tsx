@@ -1,6 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { Card, CardContent, CardFooter } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Skeleton } from "@/components/ui/skeleton"
+import { Users, Mail, Phone, MessageSquare } from "lucide-react"
+import Cookies from "js-cookie"
 
 type Customer = {
   _id: string
@@ -11,6 +18,7 @@ type Customer = {
 }
 
 export default function CustomerList() {
+  const router = useRouter()
   const [customers, setCustomers] = useState<Customer[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -41,9 +49,7 @@ export default function CustomerList() {
           console.error("Unknown error fetching customers:", err)
           setError("An unknown error occurred while fetching customers")
         }
-      } 
-      
-      finally {
+      } finally {
         setLoading(false)
       }
     }
@@ -51,163 +57,129 @@ export default function CustomerList() {
     fetchCustomers()
   }, [])
 
-  useEffect(() => {
-    const handleResize = () => {
-      const customerList = document.querySelector("[data-customer-list]")
-      if (customerList && window.innerWidth <= 640) {
-        ;(customerList as HTMLElement).style.gridTemplateColumns = "1fr"
-      } else if (customerList) {
-        ;(customerList as HTMLElement).style.gridTemplateColumns = "repeat(auto-fill, minmax(300px, 1fr))"
-      }
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "active":
+        return "bg-emerald-100 text-emerald-800 hover:bg-emerald-200"
+      case "inactive":
+        return "bg-rose-100 text-rose-800 hover:bg-rose-200"
+      default:
+        return "bg-amber-100 text-amber-800 hover:bg-amber-200"
+    }
+  }
+
+  const handleChatboxClick = (customerId: string) => {
+    // Find the selected customer
+    const selectedCustomer = customers.find((customer) => customer._id === customerId)
+
+    if (selectedCustomer) {
+      // Set the customer data as a cls
+      // e
+      Cookies.set("customer", JSON.stringify(selectedCustomer), { path: "/" })
     }
 
-    // Initial call
-    handleResize()
-
-    // Add event listener
-    window.addEventListener("resize", handleResize)
-
-    // Cleanup
-    return () => window.removeEventListener("resize", handleResize)
-  }, [])
+    router.push(`/chatbox`)
+  }
 
   return (
-    <div style={styles.container}>
-      <h1 style={styles.title}>Customer List</h1>
+    <div className="container mx-auto py-8 px-4 md:px-6">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+            Customer Directory
+          </h1>
+          <p className="text-slate-500 mt-2">Manage and connect with your customers</p>
+        </div>
+        <div className="hidden md:block">
+          <Users className="h-12 w-12 text-indigo-500" />
+        </div>
+      </div>
 
-      {loading && <p style={styles.loading}>Loading customers...</p>}
-
-      {error && (
-        <div style={styles.error}>
-          <p>Error: {error}</p>
-          <p style={styles.errorHelp}>Make sure your API endpoint is returning valid JSON data.</p>
+      {loading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(6)].map((_, i) => (
+            <Card key={i} className="overflow-hidden border-0 shadow-lg">
+              <CardContent className="p-6">
+                <Skeleton className="h-6 w-3/4 mb-4" />
+                <Skeleton className="h-4 w-full mb-2" />
+                <Skeleton className="h-4 w-full mb-2" />
+                <Skeleton className="h-4 w-1/2" />
+              </CardContent>
+              <CardFooter className="bg-slate-50 p-4">
+                <Skeleton className="h-9 w-full" />
+              </CardFooter>
+            </Card>
+          ))}
         </div>
       )}
 
-      {!loading && !error && customers.length === 0 && <p style={styles.noCustomers}>No customers found.</p>}
+      {error && (
+        <div className="bg-rose-50 border-l-4 border-rose-500 p-6 rounded-md shadow-md">
+          <div className="flex items-center">
+            <div className="flex-shrink-0">
+              <svg className="h-8 w-8 text-rose-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                />
+              </svg>
+            </div>
+            <div className="ml-4">
+              <h3 className="text-lg font-medium text-rose-800">Error Loading Customers</h3>
+              <p className="mt-1 text-rose-700">{error}</p>
+              <p className="mt-2 text-sm text-rose-600">Make sure your API endpoint is returning valid JSON data.</p>
+            </div>
+          </div>
+        </div>
+      )}
 
-      <div style={styles.customerList} data-customer-list>
+      {!loading && !error && customers.length === 0 && (
+        <div className="bg-slate-50 rounded-lg p-12 text-center shadow-inner">
+          <Users className="h-16 w-16 text-slate-300 mx-auto mb-4" />
+          <h3 className="text-xl font-medium text-slate-700">No customers found</h3>
+          <p className="mt-2 text-slate-500">Your customer list is currently empty.</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {!loading &&
           !error &&
           customers.map((customer) => (
-            <div key={customer._id} style={styles.card}>
-              <div>
-                <h2 style={styles.name}>{customer.name}</h2>
-                <p style={styles.email}>{customer.email}</p>
-                <p style={styles.phone}>{customer.phone}</p>
-                <p style={styles.statusLabel}>
-                  Status:
-                  <span
-                    style={{
-                      ...styles.status,
-                      color:
-                        customer.status.toLowerCase() === "active"
-                          ? "#2e7d32"
-                          : customer.status.toLowerCase() === "inactive"
-                            ? "#c62828"
-                            : "#f57c00",
-                    }}
-                  >
-                    {customer.status}
-                  </span>
-                </p>
-              </div>
-              <div style={styles.actions}>
-                <button style={styles.actionButton}>Actions</button>
-              </div>
-            </div>
+            <Card
+              key={customer._id}
+              className="overflow-hidden border-0 shadow-lg hover:shadow-xl transition-shadow duration-300"
+            >
+              <div className="h-2 bg-gradient-to-r from-indigo-500 to-purple-600"></div>
+              <CardContent className="p-6">
+                <h2 className="text-xl font-bold text-slate-800 mb-3">{customer.name}</h2>
+                <div className="space-y-2 text-slate-600">
+                  <div className="flex items-center">
+                    <Mail className="h-4 w-4 mr-2 text-indigo-500" />
+                    <span className="text-sm">{customer.email}</span>
+                  </div>
+                  <div className="flex items-center">
+                    <Phone className="h-4 w-4 mr-2 text-indigo-500" />
+                    <span className="text-sm">{customer.phone}</span>
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <Badge className={`font-medium ${getStatusColor(customer.status)}`}>{customer.status}</Badge>
+                </div>
+              </CardContent>
+              <CardFooter className="bg-slate-50 p-4">
+                <Button
+                  onClick={() => handleChatboxClick(customer._id)}
+                  className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white"
+                >
+                  <MessageSquare className="h-4 w-4 mr-2" />
+                  Chatbox
+                </Button>
+              </CardFooter>
+            </Card>
           ))}
       </div>
     </div>
   )
-}
-
-const styles = {
-  container: {
-    padding: "2rem",
-    maxWidth: "1200px",
-    margin: "0 auto",
-  },
-  title: {
-    marginBottom: "2rem",
-    fontSize: "2rem",
-    color: "#333",
-  },
-  loading: {
-    textAlign: "center" as const,
-    fontSize: "1.2rem",
-    color: "#666",
-  },
-  error: {
-    padding: "1rem",
-    backgroundColor: "#ffebee",
-    border: "1px solid #ffcdd2",
-    borderRadius: "4px",
-    color: "#c62828",
-    marginBottom: "1rem",
-  },
-  errorHelp: {
-    fontSize: "0.9rem",
-    marginTop: "0.5rem",
-  },
-  noCustomers: {
-    textAlign: "center" as const,
-    fontSize: "1.2rem",
-    color: "#666",
-    padding: "2rem",
-    backgroundColor: "#f5f5f5",
-    borderRadius: "4px",
-  },
-  customerList: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))",
-    gap: "1.5rem",
-  },
-  card: {
-    display: "flex",
-    flexDirection: "column" as const,
-    justifyContent: "space-between",
-    padding: "1.5rem",
-    border: "1px solid #e0e0e0",
-    borderRadius: "8px",
-    backgroundColor: "white",
-    boxShadow: "0 2px 4px rgba(0, 0, 0, 0.05)",
-  },
-  name: {
-    fontSize: "1.25rem",
-    margin: "0 0 0.5rem 0",
-    color: "#333",
-  },
-  email: {
-    margin: "0.25rem 0",
-    color: "#666",
-    fontSize: "0.9rem",
-  },
-  phone: {
-    margin: "0.25rem 0",
-    color: "#666",
-    fontSize: "0.9rem",
-  },
-  statusLabel: {
-    margin: "0.5rem 0",
-    fontWeight: 500,
-  },
-  status: {
-    marginLeft: "0.5rem",
-    fontWeight: "bold",
-  },
-  actions: {
-    display: "flex",
-    justifyContent: "flex-end",
-    marginTop: "1rem",
-  },
-  actionButton: {
-    padding: "0.5rem 1rem",
-    backgroundColor: "#f5f5f5",
-    border: "1px solid #e0e0e0",
-    borderRadius: "4px",
-    color: "#333",
-    cursor: "pointer",
-    fontSize: "0.9rem",
-  },
 }
