@@ -22,6 +22,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "src/app/api/customers/add/route.js", "src/app/api/get-user-role/route.ts"],
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "src/app/api/customers/add/route.js", "src/app/api/get-user-role/route.ts", "src/app/api/zoho/leads/route.js"],
   "exclude": ["node_modules"]
 }

@@ -48,7 +48,7 @@ export const config = {
     "/api/customers/summarize",
     "/api/customers/sendMail",
     // Frontend protected routes
-    "/chatbox",
+    //"/chatbox",
     "/addCustomer",
   ],
 }

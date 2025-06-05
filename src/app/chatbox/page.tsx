@@ -2,432 +2,478 @@
 
 import type React from "react"
 
-import { useState, useRef, useEffect } from "react"
-import { motion, AnimatePresence } from "framer-motion"
-import { FileText, Mail, ArrowRight, MessageSquare, Send, User, Bot } from "lucide-react"
+import { useState, useEffect, useRef } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import PDFSummarizer from "@/components/pdf-summarizer"
-import CustomerEmailGenerator from "@/components/customer-email-generator"
+import { Badge } from "@/components/ui/badge"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ArrowLeft, Send, Bot, User, Copy, Check, Mail, CheckCircle, AlertCircle, X } from "lucide-react"
+import axios from "axios"
 
-type Message = {
+interface Message {
   id: string
+  role: "user" | "assistant"
   content: string
-  sender: "user" | "bot"
-  options?: Array<{
-    id: string
-    label: string
-    value: "pdf" | "email"
-    icon: React.ReactNode
-    description: string
-  }>
+  timestamp: Date
 }
 
-export default function CustomerTools() {
-  const [userRole, setUserRole] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+interface LeadInfo {
+  id: string
+  name: string
+  email: string
+  company: string
+}
+
+interface EmailContent {
+  subject: string
+  body: string
+}
+
+interface Notification {
+  id: string
+  type: "success" | "error" | "info"
+  title: string
+  description: string
+  action?: {
+    label: string
+    onClick: () => void
+  }
+}
+
+export default function ChatboxPage() {
+  const searchParams = useSearchParams()
+  const router = useRouter()
   const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput] = useState("")
-  const [selectedTool, setSelectedTool] = useState<"pdf" | "email" | null>(null)
-  const [showConfirmation, setShowConfirmation] = useState(false)
-  const [confirmedTool, setConfirmedTool] = useState<"pdf" | "email" | null>(null)
+  const [inputValue, setInputValue] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [isSending, setIsSending] = useState(false)
+  const [leadInfo, setLeadInfo] = useState<LeadInfo | null>(null)
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null)
+  const [notifications, setNotifications] = useState<Notification[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Function to get user role from API
-  const getUserRole = async () => {
-    try {
-      const response = await fetch("/api/get-user-role")
-
-      if (!response.ok) {
-        console.error("Failed to fetch user role:", await response.text())
-        return null
-      }
-
-      const data = await response.json()
-      return data.role
-    } catch (error) {
-      console.error("Error fetching user role:", error)
-      return null
-    }
-  }
-
-  // Function to handle logout
-  const handleLogout = async () => {
-    try {
-      const response = await fetch("/api/logout", {
-      method: "POST",
-      credentials: "include",
-    })
-
-      if (response.ok) {
-        // Redirect to login page after successful logout
-        window.location.href = "/login"
-      } else {
-        console.error("Logout failed:", await response.text())
-      }
-    } catch (error) {
-      console.error("Error during logout:", error)
-    }
-  }
-
-  // Get options based on user role
-  const getOptionsForRole = (role: string | null) => {
-    if (role === "docer") {
-      return [
-        {
-          id: "pdf-option",
-          label: "Summarize a PDF",
-          value: "pdf" as const,
-          icon: <FileText className="h-4 w-4" />,
-          description: "Upload a PDF document and get an AI-generated summary",
-        },
-      ]
-    } else if (role === "mailer") {
-      return [
-        {
-          id: "email-option",
-          label: "Generate Customer Email",
-          value: "email" as const,
-          icon: <Mail className="h-4 w-4" />,
-          description: "Create a personalized email for a customer",
-        },
-      ]
-    }
-
-    // If role is not recognized or null, return empty array
-    return []
-  }
-
-  // Initialize user role and welcome message
   useEffect(() => {
-    const initializeUser = async () => {
-      setIsLoading(true)
+    // Get lead info from URL params
+    const leadId = searchParams.get("leadId")
+    const name = searchParams.get("name")
+    const email = searchParams.get("email")
+    const company = searchParams.get("company")
 
-      // Get user role from API
-      const role = await getUserRole()
-      setUserRole(role)
+    if (leadId && name && email) {
+      const lead: LeadInfo = {
+        id: leadId,
+        name: decodeURIComponent(name),
+        email: decodeURIComponent(email),
+        company: decodeURIComponent(company || ""),
+      }
+      setLeadInfo(lead)
 
-      // Get options based on role
-      const options = getOptionsForRole(role)
-
-      // Set initial welcome message
-      setMessages([
-        {
-          id: "welcome",
-          content: "Hello! I'm your assistant. What would you like to do today?",
-          sender: "bot",
-          options: options,
-        },
-      ])
-
-      setIsLoading(false)
+      // Add initial AI message
+      const initialMessage: Message = {
+        id: "initial",
+        role: "assistant",
+        content: `Hello! I'm here to help you generate an email for ${lead.name} from ${lead.company || "their company"}. Should I generate an email for this lead?`,
+        timestamp: new Date(),
+      }
+      setMessages([initialMessage])
     }
-
-    initializeUser()
-  }, [])
-
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
-  }
+  }, [searchParams])
 
   useEffect(() => {
     scrollToBottom()
   }, [messages])
 
-  const handleToolSelect = (tool: "pdf" | "email") => {
-    setSelectedTool(tool)
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
+  }
 
-    // Add user message
+  const addNotification = (notification: Omit<Notification, "id">) => {
+    const id = Date.now().toString()
+    const newNotification = { ...notification, id }
+    setNotifications((prev) => [...prev, newNotification])
+
+    // Auto-remove notification after 5 seconds
+    setTimeout(() => {
+      removeNotification(id)
+    }, 5000)
+  }
+
+  const removeNotification = (id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id))
+  }
+
+  const handleSendMessage = async () => {
+    if (!inputValue.trim() || !leadInfo) return
+
     const userMessage: Message = {
-      id: Date.now().toString() + "-user",
-      content: tool === "pdf" ? "I want to summarize a PDF" : "I want to generate a customer email",
-      sender: "user",
+      id: Date.now().toString(),
+      role: "user",
+      content: inputValue,
+      timestamp: new Date(),
     }
 
     setMessages((prev) => [...prev, userMessage])
+    setInputValue("")
+    setIsLoading(true)
 
-    // Add bot response
-    setTimeout(() => {
-      const botResponse: Message = {
-        id: Date.now().toString() + "-bot",
-        content:
-          tool === "pdf"
-            ? "You've selected the PDF Summarizer. Would you like to proceed?"
-            : "You've selected the Customer Email Generator. Would you like to proceed?",
-        sender: "bot",
+    try {
+      const response = await axios.post("/api/chat", {
+        message: inputValue,
+        leadInfo,
+        conversationHistory: messages,
+      })
+
+      const aiMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: response.data.message,
+        timestamp: new Date(),
       }
-      setMessages((prev) => [...prev, botResponse])
-      setShowConfirmation(true)
-    }, 500)
-  }
 
-  const handleConfirm = () => {
-    setShowConfirmation(false)
-
-    // Add confirmation message
-    const confirmMessage: Message = {
-      id: Date.now().toString() + "-bot",
-      content:
-        selectedTool === "pdf"
-          ? "Great! I'm taking you to the PDF Summarizer now..."
-          : "Great! I'm taking you to the Customer Email Generator now...",
-      sender: "bot",
-    }
-
-    setMessages((prev) => [...prev, confirmMessage])
-
-    // Delay to show the message before transitioning
-    setTimeout(() => {
-      setConfirmedTool(selectedTool)
-    }, 1000)
-  }
-
-  const handleCancel = () => {
-    setShowConfirmation(false)
-
-    // Add cancellation message
-    const cancelMessage: Message = {
-      id: Date.now().toString() + "-bot",
-      content: "No problem. What would you like to do instead?",
-      sender: "bot",
-      options: getOptionsForRole(userRole),
-    }
-
-    setMessages((prev) => [...prev, cancelMessage])
-    setSelectedTool(null)
-  }
-
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!input.trim()) return
-
-    // Add user message
-    const userMessage: Message = {
-      id: Date.now().toString() + "-user",
-      content: input,
-      sender: "user",
-    }
-
-    setMessages((prev) => [...prev, userMessage])
-    setInput("")
-
-    // Add bot response
-    setTimeout(() => {
-      const botResponse: Message = {
-        id: Date.now().toString() + "-bot",
-        content: "I can help you with that. Please select one of the following options:",
-        sender: "bot",
-        options: getOptionsForRole(userRole),
+      setMessages((prev) => [...prev, aiMessage])
+    } catch (error) {
+      console.error("Error sending message:", error)
+      const errorMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "assistant",
+        content: "Sorry, I encountered an error. Please try again.",
+        timestamp: new Date(),
       }
-      setMessages((prev) => [...prev, botResponse])
-    }, 500)
+      setMessages((prev) => [...prev, errorMessage])
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  const handleBackToChat = () => {
-    setConfirmedTool(null)
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      handleSendMessage()
+    }
+  }
 
-    // Add return message
-    const returnMessage: Message = {
-      id: Date.now().toString() + "-bot",
-      content: "Welcome back! What would you like to do next?",
-      sender: "bot",
-      options: getOptionsForRole(userRole),
+  const copyToClipboard = async (content: string, messageId: string) => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopiedMessageId(messageId)
+      setTimeout(() => setCopiedMessageId(null), 2000)
+      addNotification({
+        type: "success",
+        title: "Copied to clipboard",
+        description: "Email content has been copied to your clipboard.",
+      })
+    } catch (error) {
+      console.error("Failed to copy:", error)
+      addNotification({
+        type: "error",
+        title: "Failed to copy",
+        description: "Could not copy to clipboard. Please try again.",
+      })
+    }
+  }
+
+  const parseEmailContent = (content: string): EmailContent | null => {
+    // Check if the content contains an email (has a Subject line)
+    if (!content.includes("Subject:")) return null
+
+    try {
+      // Extract subject line
+      const subjectMatch = content.match(/Subject:\s*([^\n]+)/)
+      const subject = subjectMatch ? subjectMatch[1].trim() : ""
+
+      // Use the full content as body (including the subject line)
+      // The email sending function will handle formatting
+      const body = content
+
+      return { subject, body }
+    } catch (error) {
+      console.error("Error parsing email content:", error)
+      return null
+    }
+  }
+
+  const sendEmail = async (content: string) => {
+    if (!leadInfo) return
+
+    const emailContent = parseEmailContent(content)
+    if (!emailContent) {
+      addNotification({
+        type: "error",
+        title: "Invalid email format",
+        description: "Could not detect a valid email format. Please ensure the message contains a subject line.",
+      })
+      return
     }
 
-    setMessages((prev) => [...prev, returnMessage])
+    setIsSending(true)
+
+    try {
+      // Replace placeholders in the email content with actual lead data
+      const processedBody = emailContent.body
+        .replace(/\[name\]/gi, leadInfo.name)
+        .replace(/\[company\]/gi, leadInfo.company || "your company")
+        .replace(/\[email\]/gi, leadInfo.email)
+
+      const response = await axios.post("/api/email/send", {
+        to: leadInfo.email,
+        subject: emailContent.subject,
+        body: processedBody,
+        leadId: leadInfo.id,
+      })
+
+      if (response.data.success) {
+        addNotification({
+          type: "success",
+          title: "Email sent successfully",
+          description: `Email has been sent to ${leadInfo.name}.`,
+        })
+
+        // Add a system message about the email being sent
+        const systemMessage: Message = {
+          id: Date.now().toString(),
+          role: "assistant",
+          content: `✅ Email sent successfully to ${leadInfo.name} (${leadInfo.email})\n\nThe lead has been marked as converted and will now appear in Call 2.`,
+          timestamp: new Date(),
+        }
+        setMessages((prev) => [...prev, systemMessage])
+
+        // If we have a preview URL (for test emails), show it
+        if (response.data.previewUrl) {
+          addNotification({
+            type: "info",
+            title: "Test email sent",
+            description: "This was a test email. You can view it at the preview URL.",
+            action: {
+              label: "View email",
+              onClick: () => window.open(response.data.previewUrl, "_blank"),
+            },
+          })
+        }
+      }
+    } catch (error) {
+      console.error("Error sending email:", error)
+      addNotification({
+        type: "error",
+        title: "Failed to send email",
+        description: "There was an error sending the email. Please try again.",
+      })
+    } finally {
+      setIsSending(false)
+    }
   }
 
-  if (isLoading) {
+  const formatTimestamp = (timestamp: Date) => {
+    return timestamp.toLocaleTimeString("en-GB", {
+      hour: "2-digit",
+      minute: "2-digit",
+    })
+  }
+
+  const containsEmail = (content: string): boolean => {
+    return content.includes("Subject:")
+  }
+
+  if (!leadInfo) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading your assistant...</p>
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-slate-900 flex items-center justify-center">
+        <div className="text-white text-center">
+          <h1 className="text-2xl font-bold mb-4">Loading...</h1>
+          <p>Please wait while we load the lead information.</p>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50">
-      <div className="container max-w-7xl mx-auto py-12 px-4">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 via-pink-500 to-orange-500 text-transparent bg-clip-text mb-4">
-            Customer Service Assistant
-          </h1>
-          <p className="text-gray-600 max-w-2xl mx-auto">
-            Chat with your assistant to access tools that help you manage customer interactions efficiently.
-          </p>
-        </div>
-
-        {!confirmedTool ? (
-          <Card className="max-w-4xl mx-auto shadow-lg border-0 overflow-hidden">
-            <div className="bg-gradient-to-r from-purple-500 to-pink-500 p-4 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <MessageSquare className="h-5 w-5" />
-                <h2 className="font-semibold">Customer Service Chat</h2>
+    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-slate-900">
+      {/* Notifications */}
+      <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm">
+        {notifications.map((notification) => (
+          <Alert
+            key={notification.id}
+            className={`border-l-4 shadow-lg transition-all duration-300 ${
+              notification.type === "success"
+                ? "border-l-green-500 bg-green-950/50 border-green-800"
+                : notification.type === "error"
+                  ? "border-l-red-500 bg-red-950/50 border-red-800"
+                  : "border-l-blue-500 bg-blue-950/50 border-blue-800"
+            }`}
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex items-start gap-2">
+                {notification.type === "success" && <CheckCircle className="w-4 h-4 text-green-400 mt-0.5" />}
+                {notification.type === "error" && <AlertCircle className="w-4 h-4 text-red-400 mt-0.5" />}
+                {notification.type === "info" && <Mail className="w-4 h-4 text-blue-400 mt-0.5" />}
+                <div className="flex-1">
+                  <h4 className="text-sm font-medium text-white">{notification.title}</h4>
+                  <AlertDescription className="text-xs text-gray-300 mt-1">{notification.description}</AlertDescription>
+                  {notification.action && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={notification.action.onClick}
+                      className="text-xs mt-2 p-1 h-auto text-blue-400 hover:text-blue-300"
+                    >
+                      {notification.action.label}
+                    </Button>
+                  )}
+                </div>
               </div>
               <Button
                 variant="ghost"
-                className="text-white hover:bg-purple-600 hover:text-white"
-                onClick={handleLogout}
+                size="sm"
+                onClick={() => removeNotification(notification.id)}
+                className="p-1 h-auto text-gray-400 hover:text-white"
               >
-                Logout
+                <X className="w-3 h-3" />
               </Button>
             </div>
-            <CardContent className="p-0">
-              <div className="h-[500px] flex flex-col">
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={`flex ${message.sender === "user" ? "justify-end" : "justify-start"}`}
-                    >
-                      <div
-                        className={`flex items-start gap-2 max-w-[80%] ${message.sender === "user" ? "flex-row-reverse" : ""}`}
-                      >
-                        <div
-                          className={`rounded-full p-2 flex-shrink-0 ${message.sender === "user" ? "bg-purple-100" : "bg-gray-100"}`}
-                        >
-                          {message.sender === "user" ? (
-                            <User className="h-5 w-5 text-purple-500" />
-                          ) : (
-                            <Bot className="h-5 w-5 text-pink-500" />
-                          )}
-                        </div>
-                        <div
-                          className={`rounded-lg p-3 ${message.sender === "user" ? "bg-gradient-to-r from-purple-500 to-indigo-600 text-white" : "bg-white border"}`}
-                        >
-                          <p>{message.content}</p>
+          </Alert>
+        ))}
+      </div>
 
-                          {message.options && message.options.length > 0 && (
-                            <div className="mt-3 space-y-2">
-                              {message.options.map((option) => (
-                                <button
-                                  key={option.id}
-                                  onClick={() => handleToolSelect(option.value)}
-                                  className="w-full text-left p-3 rounded-lg border hover:border-purple-300 bg-white hover:bg-purple-50 transition-colors flex items-start gap-3"
-                                >
-                                  <div
-                                    className={`rounded-full p-2 ${option.value === "pdf" ? "bg-purple-100 text-purple-500" : "bg-pink-100 text-pink-500"}`}
-                                  >
-                                    {option.icon}
-                                  </div>
-                                  <div>
-                                    <div className="font-medium">{option.label}</div>
-                                    <div className="text-sm text-gray-500">{option.description}</div>
-                                  </div>
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  <div ref={messagesEndRef} />
-                </div>
+      {/* Header */}
+      <div className="bg-gray-800 border-b border-gray-700 p-4">
+        <div className="max-w-4xl mx-auto flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => router.back()}
+            className="text-gray-300 hover:text-white hover:bg-gray-700"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Board
+          </Button>
+          <div className="flex items-center gap-3">
+            <Avatar className="w-10 h-10">
+              <AvatarFallback className="bg-gray-700 text-gray-300">
+                <User className="w-5 h-5" />
+              </AvatarFallback>
+            </Avatar>
+            <div>
+              <h1 className="text-white font-semibold">{leadInfo.name}</h1>
+              <p className="text-gray-400 text-sm">{leadInfo.email}</p>
+            </div>
+          </div>
+          <Badge variant="secondary" className="bg-gray-700 text-gray-300">
+            {leadInfo.company || "No Company"}
+          </Badge>
+        </div>
+      </div>
 
-                <form onSubmit={handleSendMessage} className="p-4 border-t bg-white">
-                  <div className="flex gap-2">
-                    <Input
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      placeholder="Type a message..."
-                      className="flex-1"
-                    />
-                    <Button type="submit" size="icon">
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </form>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={confirmedTool}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.5 }}
-            >
-              {confirmedTool === "pdf" ? <PDFSummarizer /> : <CustomerEmailGenerator />}
-
-              <div className="mt-8 text-center">
-                <Button
-                  onClick={handleBackToChat}
-                  className="bg-gradient-to-r from-purple-500 to-pink-500 text-white hover:opacity-90"
-                >
-                  <MessageSquare className="h-4 w-4 mr-2" />
-                  Back to Chat
-                </Button>
-              </div>
-            </motion.div>
-          </AnimatePresence>
-        )}
-
-        <Dialog open={showConfirmation} onOpenChange={setShowConfirmation}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Confirm Selection</DialogTitle>
-              <DialogDescription>
-                You are about to use the {selectedTool === "pdf" ? "PDF Summarizer" : "Customer Email Generator"} tool.
-              </DialogDescription>
-            </DialogHeader>
-            <div
-              className="p-4 bg-gradient-to-r rounded-lg my-2 flex items-center gap-3"
-              style={{
-                backgroundImage:
-                  selectedTool === "pdf"
-                    ? "linear-gradient(to right, rgba(147, 51, 234, 0.1), rgba(79, 70, 229, 0.1))"
-                    : "linear-gradient(to right, rgba(236, 72, 153, 0.1), rgba(249, 115, 22, 0.1))",
-              }}
-            >
-              {selectedTool === "pdf" ? (
-                <FileText className="h-8 w-8 text-purple-500" />
-              ) : (
-                <Mail className="h-8 w-8 text-pink-500" />
+      {/* Chat Container */}
+      <div className="max-w-4xl mx-auto h-[calc(100vh-140px)] flex flex-col">
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {messages.map((message) => (
+            <div key={message.id} className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+              {message.role === "assistant" && (
+                <Avatar className="w-8 h-8 mt-1">
+                  <AvatarFallback className="bg-blue-600 text-white">
+                    <Bot className="w-4 h-4" />
+                  </AvatarFallback>
+                </Avatar>
               )}
-              <div>
-                <h3 className="font-medium">
-                  {selectedTool === "pdf" ? "PDF Summarizer" : "Customer Email Generator"}
-                </h3>
-                <p className="text-sm text-gray-600">
-                  {selectedTool === "pdf"
-                    ? "Upload and summarize PDF documents"
-                    : "Generate personalized customer emails"}
-                </p>
+              <div
+                className={`max-w-[70%] ${
+                  message.role === "user"
+                    ? "bg-blue-600 text-white rounded-l-lg rounded-tr-lg"
+                    : "bg-gray-800 text-gray-100 rounded-r-lg rounded-tl-lg"
+                } p-4 shadow-lg`}
+              >
+                <div className="whitespace-pre-wrap">{message.content}</div>
+                <div className="flex items-center justify-between mt-2">
+                  <span className="text-xs opacity-70">{formatTimestamp(message.timestamp)}</span>
+                  {message.role === "assistant" && containsEmail(message.content) && (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyToClipboard(message.content, message.id)}
+                        className="text-xs p-1 h-auto hover:bg-gray-700"
+                        disabled={isSending}
+                      >
+                        {copiedMessageId === message.id ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => sendEmail(message.content)}
+                        className="text-xs p-1 h-auto hover:bg-gray-700 text-blue-400 hover:text-blue-300"
+                        disabled={isSending}
+                      >
+                        {isSending ? (
+                          <div className="flex items-center gap-1">
+                            <div className="w-3 h-3 border-2 border-t-transparent border-blue-400 rounded-full animate-spin"></div>
+                            <span>Sending...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <Mail className="w-3 h-3 mr-1" />
+                            <span>Send</span>
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+              {message.role === "user" && (
+                <Avatar className="w-8 h-8 mt-1">
+                  <AvatarFallback className="bg-gray-600 text-white">
+                    <User className="w-4 h-4" />
+                  </AvatarFallback>
+                </Avatar>
+              )}
+            </div>
+          ))}
+          {isLoading && (
+            <div className="flex gap-3 justify-start">
+              <Avatar className="w-8 h-8 mt-1">
+                <AvatarFallback className="bg-blue-600 text-white">
+                  <Bot className="w-4 h-4" />
+                </AvatarFallback>
+              </Avatar>
+              <div className="bg-gray-800 text-gray-100 rounded-r-lg rounded-tl-lg p-4 shadow-lg">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+                  <div
+                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                    style={{ animationDelay: "0.1s" }}
+                  ></div>
+                  <div
+                    className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+                    style={{ animationDelay: "0.2s" }}
+                  ></div>
+                </div>
               </div>
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={handleCancel}>
-                Cancel
-              </Button>
-              <Button
-                onClick={handleConfirm}
-                className={
-                  selectedTool === "pdf"
-                    ? "bg-gradient-to-r from-purple-500 to-indigo-600 text-white"
-                    : "bg-gradient-to-r from-pink-500 to-orange-500 text-white"
-                }
-              >
-                Confirm <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+
+        {/* Input */}
+        <div className="p-6 bg-gray-800 border-t border-gray-700">
+          <div className="flex gap-3">
+            <Input
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyPress={handleKeyPress}
+              placeholder="Type your message about the email..."
+              className="flex-1 bg-gray-700 border-gray-600 text-white placeholder-gray-400 focus:border-blue-500"
+              disabled={isLoading || isSending}
+            />
+            <Button
+              onClick={handleSendMessage}
+              disabled={!inputValue.trim() || isLoading || isSending}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              <Send className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   )
